@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-
-'''Python 3 remiplementation of the linux 'tree' utility'''
-
 import os
 import sys
+import json
+
+'''Python 3 remiplementation of the linux 'tree' utility'''
 
 chars = {
     'nw': '\u2514',
@@ -40,6 +40,50 @@ def colorize(path, full = False):
 
     return file
 
+def build_tree(dir, opts, top = True):
+    dirs = 0
+    files = 0
+
+    if top:
+        contents, dirs, files = build_tree(dir, opts, False)
+        return [
+            {
+                'name': dir,
+                'type': 'directory',
+                'contents': contents
+            },
+            {
+                'type': 'report',
+                'directories': dirs,
+                'files': files
+            }
+        ]
+    else:
+        tree = []
+        dirs = 0
+        files = 0
+
+        for filename in sorted(os.listdir(dir), key = str.lower):
+            if filename[0] == '.': continue
+            path = os.path.join(dir, filename)
+            node = {
+                'name': filename,
+                'size': os.path.getsize(path)
+            }
+            if os.path.isdir(path):
+                node['type'] = 'directory'
+                node['contents'], d, f = build_tree(path, opts, False)
+                dirs += d
+                files += f
+            else:
+                node['type'] = 'file'
+                files += 1
+            tree.append(node)
+        return tree, dirs, files
+
+def print_tree(tree, opts):
+    pass
+
 def print_dir(dir, pre = '', opts = {}):
     dirs = 0
     files = 0
@@ -52,7 +96,7 @@ def print_dir(dir, pre = '', opts = {}):
         path = os.path.join(dir, file)
         if file[0] == '.' and not opts['show_hidden']: continue
         if os.path.isdir(path):
-            print(pre + strs[2 if i == dir_len else 1] + colorize(path))
+            print(pre + strs[2 if 1 == dir_len else 1] + colorize(path))
             if os.path.islink(path):
                 dirs += 1
             else:
@@ -62,9 +106,8 @@ def print_dir(dir, pre = '', opts = {}):
                 size += s
         else:
             files += 1
-            size += os.path.getsize(path)
-            print(pre + strs[2 if i == dir_len else 1] + ('[{:>11}]  '.format(size) if opts['show_size'] else '') + colorize(path))
-
+            size += os.path.getsize(path)
+            print(pre + strs[2 if i == dir_len else 1] + ('[{:>11}]  '.format(size) if opts['show_size'] else '') + colorize(path))
 
     return (dirs, files, size)
 
@@ -77,13 +120,5 @@ opts = {
     'follow_symlinks': False
 }
 
-if len(sys.argv) == 1:
-    dirs, files, size = print_dir('.', opts = opts)
-else:
-    for dir in sys.argv[1:]:
-        d, f = print_dir(dir, opts = opts)
-        dirs += d
-        files += f
-
-print()
-print('{} director{}, {} file{}'.format(dirs, 'ies' if dirs != 1 else 'y', files, 's' if files != 1 else ''))
+tree = build_tree('.', opts)
+print(json.dumps(tree, sort_keys = True))
