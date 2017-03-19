@@ -40,46 +40,39 @@ def colorize(path, full = False):
 
     return file
 
-def build_tree(dir, opts, top = True):
+def build_tree(dir, opts):
+    tree = []
     dirs = 0
     files = 0
 
-    if top:
-        contents, dirs, files = build_tree(dir, opts, False)
-        return [
-            {
-                'name': dir,
-                'type': 'directory',
-                'contents': contents
-            },
-            {
-                'type': 'report',
-                'directories': dirs,
-                'files': files
-            }
-        ]
-    else:
-        tree = []
-        dirs = 0
-        files = 0
-
-        for filename in sorted(os.listdir(dir), key = str.lower):
-            if filename[0] == '.': continue
-            path = os.path.join(dir, filename)
-            node = {
-                'name': filename,
-                'size': os.path.getsize(path)
-            }
+    for filename in sorted(os.listdir(dir), key = str.lower):
+        if filename[0] == '.' and not opts['show_hidden']: continue
+        path = os.path.join(dir, filename)
+        node = {'name': filename}
+        if opts['show_size']: node['size'] = os.path.getsize(path)
+        if os.path.islink(path):
+            node['type'] = 'link'
+            node['target'] = os.readlink(path)
+            node['contents'] = []
             if os.path.isdir(path):
-                node['type'] = 'directory'
-                node['contents'], d, f = build_tree(path, opts, False)
-                dirs += d
-                files += f
+                if opts['follow_symlinks']:
+                    node['contents'], d, f = build_tree(path, opts)
+                    dirs += d + 1
+                    files += f
+                else:
+                    dirs += 1
             else:
-                node['type'] = 'file'
                 files += 1
-            tree.append(node)
-        return tree, dirs, files
+        elif os.path.isdir(path):
+            node['type'] = 'directory'
+            node['contents'], d, f = build_tree(path, opts)
+            dirs += d + 1
+            files += f
+        else:
+            node['type'] = 'file'
+            files += 1
+        tree.append(node)
+    return tree, dirs, files
 
 def print_tree(tree, opts):
     pass
@@ -106,19 +99,32 @@ def print_dir(dir, pre = '', opts = {}):
                 size += s
         else:
             files += 1
-            size += os.path.getsize(path)
-            print(pre + strs[2 if i == dir_len else 1] + ('[{:>11}]  '.format(size) if opts['show_size'] else '') + colorize(path))
+            size += os.path.getsize(path)
+            print(pre + strs[2 if i == dir_len else 1] + ('[{:>11}]  '.format(size) if opts['show_size'] else '') + colorize(path))
 
     return (dirs, files, size)
 
-dirs = 0
-files = 0
+if __name__ == '__main__':
+    dirs = 0
+    files = 0
 
-opts = {
-    'show_hidden': False,
-    'show_size': False,
-    'follow_symlinks': False
-}
+    opts = {
+        'show_hidden': False,
+        'show_size': False,
+        'follow_symlinks': False
+    }
 
-tree = build_tree('.', opts)
-print(json.dumps(tree, sort_keys = True))
+    tree, dirs, files = build_tree('.', opts)
+    jdata = [
+        {
+            'name': '.',
+            'type': 'directory',
+            'contents': tree
+        },
+        {
+            'type': 'report',
+            'directories': dirs,
+            'files': files
+        }
+    ]
+    print(json.dumps(jdata, sort_keys = True))
